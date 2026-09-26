@@ -24,8 +24,10 @@ const images = {
     ground: new Image(), water: new Image(), foam: new Image(), tree: new Image(),
     meat: new Image(), gold: new Image(), wood: new Image(), gold_mine: new Image(), sheep: new Image(),
     dynamite: new Image(), explosion: new Image(), fire: new Image(),
-    goblin_house: new Image(), goblin_house_destroyed: new Image(),
+    goblin_house: new Image(), goblin_house_destroyed: new Image(), goblin_tower: new Image(), goblin_tower_destroyed: new Image(),
     tower: new Image(), tower_construction: new Image(), tower_destroyed: new Image(),
+    castle: new Image(), castle_construction: new Image(), castle_destroyed: new Image(),
+    house: new Image(), house_construction: new Image(), house_destroyed: new Image(),
     pawn: new Image(), ui_banner: new Image(), ui_button: new Image(), bridge: new Image(),
     elevation: new Image(), deco1: new Image(), deco2: new Image(), deco3: new Image()
 };
@@ -65,9 +67,21 @@ images.wood.src = 'game_assets/wood.png';
 images.fire.src = 'game_assets/fire.png';
 images.goblin_house.src = 'game_assets/goblin_house.png';
 images.goblin_house_destroyed.src = 'game_assets/goblin_house_destroyed.png';
+images.goblin_tower.src = 'game_assets/goblin_tower.png';
+images.goblin_tower_destroyed.src = 'game_assets/goblin_tower_destroyed.png';
+
 images.tower.src = 'game_assets/tower.png';
 images.tower_construction.src = 'game_assets/tower_construction.png';
 images.tower_destroyed.src = 'game_assets/tower_destroyed.png';
+
+images.castle.src = 'game_assets/castle.png';
+images.castle_construction.src = 'game_assets/castle_construction.png';
+images.castle_destroyed.src = 'game_assets/castle_destroyed.png';
+
+images.house.src = 'game_assets/house.png';
+images.house_construction.src = 'game_assets/house_construction.png';
+images.house_destroyed.src = 'game_assets/house_destroyed.png';
+
 images.pawn.src = 'game_assets/pawn.png';
 images.ui_banner.src = 'game_assets/ui_banner.png';
 images.ui_button.src = 'game_assets/ui_button.png';
@@ -77,6 +91,20 @@ const keys = { w: false, a: false, s: false, d: false, e: false };
 window.addEventListener('keydown', (e) => {
     const k = e.key.toLowerCase();
     if (['w', 'a', 's', 'd', 'e'].includes(k)) keys[k] = true;
+    
+    // Construção
+    if (gameStarted && !player.dead) {
+        if (k === '1' && playerWood >= 20 && playerGold >= 10) {
+            playerWood -= 20; playerGold -= 10;
+            buildings.push(new Building(player.x, player.y, 'tower', 'player'));
+            goldEl.innerText = playerGold; woodEl.innerText = playerWood;
+        }
+        if (k === '2' && playerWood >= 50 && playerGold >= 50) {
+            playerWood -= 50; playerGold -= 50;
+            buildings.push(new Building(player.x, player.y, 'castle', 'player'));
+            goldEl.innerText = playerGold; woodEl.innerText = playerWood;
+        }
+    }
 });
 window.addEventListener('keyup', (e) => {
     const k = e.key.toLowerCase();
@@ -223,6 +251,8 @@ let screenShake = 0;
 let playerDamage = 34;
 let camera = { x: 0, y: 0 };
 let deltaFactor = 1;
+
+let buildings = [];
 
 let enemies = [];
 let items = [];
@@ -402,8 +432,8 @@ class Player extends Entity {
         } else {
             setTimeout(() => {
                 if(this.dead) return;
-                enemies.concat(sheeps).forEach(e => {
-                    if (!e.dead && Math.hypot(this.x - e.x, this.y - e.y) < HITBOX_RADIUS * 3.5) {
+                enemies.concat(sheeps).concat(buildings.filter(b => b.faction === 'enemy')).forEach(e => {
+                    if (!e.dead && e.state !== 'destroyed' && Math.hypot(this.x - e.x, this.y - e.y) < HITBOX_RADIUS * 3.5) {
                         const dirX = e.x - this.x;
                         if ((!this.flip && dirX >= -20) || (this.flip && dirX <= 20)) {
                             e.takeDamage(playerDamage, (dirX/Math.abs(dirX||1)) * 15, 0);
@@ -552,6 +582,100 @@ class Pet extends Entity {
     }
 }
 
+class Building {
+    constructor(x, y, type, faction) {
+        this.x = x; this.y = y; this.type = type; this.faction = faction;
+        this.hp = 300; this.maxHp = 300;
+        this.state = 'construction';
+        this.timer = 0;
+        
+        if (type === 'castle') { this.maxHp = 1000; this.hp = 1000; }
+        else if (type === 'tower') { this.maxHp = 250; this.hp = 250; }
+        else if (type === 'house') { this.maxHp = 150; this.hp = 150; }
+        else if (type === 'goblin_house') { this.state = 'active'; this.maxHp = 200; this.hp = 200; }
+        else if (type === 'goblin_tower') { this.state = 'active'; this.maxHp = 250; this.hp = 250; }
+    }
+    update() {
+        if (this.state === 'destroyed') return;
+        this.timer += deltaFactor;
+        
+        if (this.state === 'construction' && this.timer > 180) {
+            this.state = 'active';
+            this.timer = 0;
+        }
+        
+        if (this.state === 'active') {
+            if (this.type === 'tower' || this.type === 'goblin_tower') {
+                if (this.timer > 90) { // Atira a cada 1.5s
+                    this.timer = 0;
+                    let target = null; let tDist = 500;
+                    if (this.faction === 'player') {
+                        enemies.forEach(e => {
+                            if(!e.dead) {
+                                let d = Math.hypot(e.x - this.x, e.y - this.y);
+                                if(d<tDist){tDist=d; target=e;}
+                            }
+                        });
+                    } else {
+                        let d1 = Math.hypot(player.x - this.x, player.y - this.y);
+                        if (!player.dead && d1 < tDist) { target = player; tDist = d1; }
+                        if (pet) {
+                            let d2 = Math.hypot(pet.x - this.x, pet.y - this.y);
+                            if (d2 < tDist) target = pet;
+                        }
+                    }
+                    if (target) {
+                        let dx = target.x - this.x; let dy = target.y - this.y;
+                        let dist = Math.hypot(dx,dy);
+                        projectiles.push({
+                            x: this.x, y: this.y - 60,
+                            vx: (dx/dist)*10, vy: (dy/dist)*10,
+                            timer: 60,
+                            type: this.faction === 'player' ? 'arrow_friendly' : 'arrow_enemy'
+                        });
+                    }
+                }
+            }
+            if (this.type === 'goblin_house') {
+                if (this.timer > 400) { // A cada ~6 segundos spawna um goblin
+                    this.timer = 0;
+                    if (enemies.length < 40) enemies.push(new Enemy(this.x, this.y + 60, 'melee'));
+                }
+            }
+        }
+    }
+    takeDamage(dmg) {
+        if (this.state === 'destroyed') return;
+        this.hp -= dmg;
+        if (this.hp <= 0) {
+            this.state = 'destroyed';
+            for(let i=0; i<15; i++) {
+                dropItem(this.x + Math.random()*100-50, this.y + Math.random()*100-50, this.faction === 'enemy' ? 'gold' : 'wood');
+            }
+        }
+    }
+    draw(ctx) {
+        let img = null;
+        if (this.type === 'castle') img = this.state === 'active' ? images.castle : (this.state === 'destroyed' ? images.castle_destroyed : images.castle_construction);
+        else if (this.type === 'tower') img = this.state === 'active' ? images.tower : (this.state === 'destroyed' ? images.tower_destroyed : images.tower_construction);
+        else if (this.type === 'house') img = this.state === 'active' ? images.house : (this.state === 'destroyed' ? images.house_destroyed : images.house_construction);
+        else if (this.type === 'goblin_house') img = this.state === 'destroyed' ? images.goblin_house_destroyed : images.goblin_house;
+        else if (this.type === 'goblin_tower') img = this.state === 'destroyed' ? images.goblin_tower_destroyed : images.goblin_tower;
+        
+        if (img && img.width > 0) {
+            ctx.save();
+            ctx.translate(this.x, this.y);
+            if (this.hp < this.maxHp && this.state !== 'destroyed') {
+                ctx.fillStyle = 'black'; ctx.fillRect(-40, -img.height + 20, 80, 10);
+                ctx.fillStyle = 'red'; ctx.fillRect(-39, -img.height + 21, 78 * (this.hp/this.maxHp), 8);
+            }
+            // Centraliza o predio, alinha pelo topo/y
+            ctx.drawImage(img, 0, 0, img.width, img.height, -img.width/2, -img.height + 64, img.width, img.height);
+            ctx.restore();
+        }
+    }
+}
+
 class Enemy extends Entity {
     constructor(x, y, type) {
         let img = 'enemy';
@@ -665,6 +789,18 @@ function spawnEntity() {
         enemies.push(new Enemy(ex, ey, type));
     }
     
+    // Spawnar acampamentos (maximo 4)
+    if (buildings.filter(b => b.faction === 'enemy' && b.state !== 'destroyed').length < 4) {
+        if (Math.random() < 0.1) { // 10% chance per spawn cycle
+            let angle = Math.random() * Math.PI * 2;
+            let dist = 900 + Math.random() * 400; // Bem longe
+            let ex = player.x + Math.cos(angle) * dist;
+            let ey = player.y + Math.sin(angle) * dist;
+            let bType = Math.random() > 0.5 ? 'goblin_house' : 'goblin_tower';
+            buildings.push(new Building(ex, ey, bType, 'enemy'));
+        }
+    }
+    
     if (sheeps.length < 10) {
         let angle = Math.random() * Math.PI * 2;
         let dist = (Math.max(canvas.width, canvas.height) / 2) + 100;
@@ -761,6 +897,7 @@ function gameLoop(timestamp) {
     if (pet) renderList.push(pet);
     renderList.push(...enemies.filter(e => !e.dead));
     renderList.push(...sheeps.filter(s => !s.dead));
+    renderList.push(...buildings);
 
     visibleDecos.forEach(d => {
         if(d.type === 'tree') {
@@ -805,6 +942,7 @@ function gameLoop(timestamp) {
 
     if(!player.dead) player.update();
     if(pet) pet.update();
+    buildings.forEach(b => b.update());
     enemies.forEach(e => e.update());
     sheeps.forEach(s => s.update());
 
@@ -821,8 +959,8 @@ function gameLoop(timestamp) {
             ctx.fillStyle = '#0ff';
             ctx.fill();
             
-            enemies.concat(sheeps).forEach(e => {
-                if (!p.dead && !e.dead && Math.hypot(p.x - e.x, p.y - e.y) < 40) {
+            enemies.concat(sheeps).concat(buildings.filter(b => b.faction === 'enemy')).forEach(e => {
+                if (!p.dead && !e.dead && e.state !== 'destroyed' && Math.hypot(p.x - e.x, p.y - e.y) < 40) {
                     e.takeDamage(playerDamage, p.vx > 0 ? 15 : -15, p.vy > 0 ? 15 : -15);
                     p.dead = true;
                 }
@@ -850,7 +988,34 @@ function gameLoop(timestamp) {
                 }
             }
             if (p.timer <= 0) p.dead = true;
+        } else if (p.type === 'arrow_friendly' || p.type === 'arrow_enemy') {
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(p.x - 3, p.y - 3, 6, 6); // simple square arrow for now
+            
+            if (p.type === 'arrow_friendly') {
+                enemies.concat(sheeps).concat(buildings.filter(b => b.faction === 'enemy')).forEach(e => {
+                    if (!p.dead && !e.dead && e.state !== 'destroyed' && Math.hypot(p.x - e.x, p.y - e.y) < 30) {
+                        e.takeDamage(20, p.vx > 0 ? 10 : -10, p.vy > 0 ? 10 : -10);
+                        p.dead = true;
+                    }
+                });
+            } else {
+                if (!p.dead && !player.dead && Math.hypot(p.x - player.x, p.y - player.y) < 30) {
+                    player.takeDamage(10, p.vx > 0 ? 5 : -5, p.vy > 0 ? 5 : -5);
+                    p.dead = true;
+                }
+                if (!p.dead && pet && Math.hypot(p.x - pet.x, p.y - pet.y) < 30) p.dead = true;
+                
+                buildings.filter(b => b.faction === 'player').forEach(e => {
+                    if (!p.dead && e.state !== 'destroyed' && Math.hypot(p.x - e.x, p.y - e.y) < 40) {
+                        e.takeDamage(10);
+                        p.dead = true;
+                    }
+                });
+            }
+            if (p.timer <= 0) p.dead = true;
         } else {
+            // Default to dynamite
             ctx.drawImage(images.dynamite, 0, 0, 64, 64, p.x - 15, p.y - 15, 30, 30);
             if (p.timer <= 0) { p.dead = true; createExplosion(p.x, p.y, 25, 60); }
         }
