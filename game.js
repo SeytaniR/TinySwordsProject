@@ -29,7 +29,8 @@ const images = {
     castle: new Image(), castle_construction: new Image(), castle_destroyed: new Image(),
     house: new Image(), house_construction: new Image(), house_destroyed: new Image(),
     pawn: new Image(), ui_banner: new Image(), ui_button: new Image(), bridge: new Image(),
-    elevation: new Image(), deco1: new Image(), deco2: new Image(), deco3: new Image()
+    elevation: new Image(), deco1: new Image(), deco2: new Image(), deco3: new Image(),
+    construction_base: new Image()
 };
 
 let imagesLoaded = 0;
@@ -84,6 +85,7 @@ images.house_construction.src = 'game_assets/house_construction.png';
 images.house_destroyed.src = 'game_assets/house_destroyed.png';
 
 images.pawn.src = 'game_assets/pawn.png';
+images.construction_base.src = 'game_assets/construction_base.png';
 images.ui_banner.src = 'game_assets/ui_banner.png';
 images.ui_button.src = 'game_assets/ui_button.png';
 images.bridge.src = 'game_assets/bridge.png';
@@ -93,17 +95,13 @@ window.addEventListener('keydown', (e) => {
     const k = e.key.toLowerCase();
     if (['w', 'a', 's', 'd', 'e'].includes(k)) keys[k] = true;
     
-    // Construção
+    // Construção (agora apenas coloca o blueprint, os Pawns gastam o recurso)
     if (gameStarted && !player.dead) {
-        if (k === '1' && playerWood >= 20 && playerGold >= 10) {
-            playerWood -= 20; playerGold -= 10;
+        if (k === '1') {
             buildings.push(new Building(player.x, player.y, 'tower', 'player'));
-            goldEl.innerText = playerGold; woodEl.innerText = playerWood;
         }
-        if (k === '2' && playerWood >= 50 && playerGold >= 50) {
-            playerWood -= 50; playerGold -= 50;
+        if (k === '2') {
             buildings.push(new Building(player.x, player.y, 'castle', 'player'));
-            goldEl.innerText = playerGold; woodEl.innerText = playerWood;
         }
     }
 });
@@ -254,6 +252,7 @@ let camera = { x: 0, y: 0 };
 let deltaFactor = 1;
 
 let buildings = [];
+let pawns = [];
 
 let enemies = [];
 let items = [];
@@ -583,12 +582,87 @@ class Pet extends Entity {
     }
 }
 
+class Pawn extends Entity {
+    constructor(x, y) {
+        super(x, y, 1.5, 'pawn');
+        this.targetBuilding = null;
+        this.buildCooldown = 0;
+    }
+    
+    update() {
+        if (this.dead) return;
+        this.updatePhysics();
+        this.updateAnimation();
+        this.buildCooldown -= deltaFactor;
+
+        this.targetBuilding = null;
+        let tDist = 1000;
+        buildings.forEach(b => {
+            if (b.faction === 'player' && b.state === 'blueprint') {
+                let d = Math.hypot(b.x - this.x, b.y - this.y);
+                if (d < tDist) { tDist = d; this.targetBuilding = b; }
+            }
+        });
+
+        if (this.targetBuilding) {
+            const dx = this.targetBuilding.x - this.x;
+            const dy = this.targetBuilding.y - this.y;
+            const dist = Math.hypot(dx, dy);
+            
+            if (dist < 60) {
+                if (!this.attacking) {
+                    this.state = 'attack';
+                    this.frame = 0;
+                    this.attacking = true;
+                    this.flip = dx < 0;
+                    
+                    setTimeout(() => {
+                        this.attacking = false;
+                        if (!this.targetBuilding || this.targetBuilding.state !== 'blueprint') return;
+                        
+                        let builtSomething = false;
+                        if (playerWood > 0) { playerWood--; builtSomething = true; }
+                        if (playerGold > 0) { playerGold--; builtSomething = true; }
+                        
+                        if (builtSomething) {
+                            this.targetBuilding.buildProgress += 5; 
+                            woodEl.innerText = playerWood;
+                            goldEl.innerText = playerGold;
+                        } else {
+                            this.state = 'idle'; // Pobreza
+                        }
+                    }, 400); // Frame da martelada
+                }
+            } else {
+                if (!this.attacking) {
+                    this.state = 'run';
+                    this.flip = dx < 0;
+                    moveEntity(this, (dx/dist)*this.speed, (dy/dist)*this.speed, deltaFactor);
+                }
+            }
+        } else {
+            // Idle perto do player
+            const dx = player.x - this.x;
+            const dy = player.y - this.y;
+            const dist = Math.hypot(dx, dy);
+            if (dist > 150 && !this.attacking) {
+                this.state = 'run';
+                this.flip = dx < 0;
+                moveEntity(this, (dx/dist)*this.speed, (dy/dist)*this.speed, deltaFactor);
+            } else if (!this.attacking) {
+                this.state = 'idle';
+            }
+        }
+    }
+}
+
 class Building {
     constructor(x, y, type, faction) {
         this.x = x; this.y = y; this.type = type; this.faction = faction;
         this.hp = 300; this.maxHp = 300;
-        this.state = 'construction';
+        this.state = faction === 'player' ? 'blueprint' : 'active';
         this.timer = 0;
+        this.buildProgress = 0; // Vai até 100 com as marteladas dos Pawns
         
         if (type === 'castle') { this.maxHp = 1000; this.hp = 1000; }
         else if (type === 'tower') { this.maxHp = 250; this.hp = 250; }
@@ -600,9 +674,11 @@ class Building {
         if (this.state === 'destroyed') return;
         this.timer += deltaFactor;
         
-        if (this.state === 'construction' && this.timer > 180) {
-            this.state = 'active';
-            this.timer = 0;
+        if (this.state === 'construction') {
+            // Animacao de construcao ja comecou visualmente apos blueprint, mas agora e baseada no buildProgress
+            if (this.buildProgress >= 100) {
+                this.state = 'active';
+            }
         }
         
         if (this.state === 'active') {
@@ -657,19 +733,32 @@ class Building {
     }
     draw(ctx) {
         let img = null;
-        if (this.type === 'castle') img = this.state === 'active' ? images.castle : (this.state === 'destroyed' ? images.castle_destroyed : images.castle_construction);
-        else if (this.type === 'tower') img = this.state === 'active' ? images.tower : (this.state === 'destroyed' ? images.tower_destroyed : images.tower_construction);
-        else if (this.type === 'house') img = this.state === 'active' ? images.house : (this.state === 'destroyed' ? images.house_destroyed : images.house_construction);
-        else if (this.type === 'goblin_house') img = this.state === 'destroyed' ? images.goblin_house_destroyed : images.goblin_house;
-        else if (this.type === 'goblin_tower') img = this.state === 'destroyed' ? images.goblin_tower_destroyed : images.goblin_tower;
+        if (this.state === 'blueprint') {
+            img = images.construction_base;
+        } else {
+            if (this.type === 'castle') img = this.state === 'active' ? images.castle : (this.state === 'destroyed' ? images.castle_destroyed : images.castle_construction);
+            else if (this.type === 'tower') img = this.state === 'active' ? images.tower : (this.state === 'destroyed' ? images.tower_destroyed : images.tower_construction);
+            else if (this.type === 'house') img = this.state === 'active' ? images.house : (this.state === 'destroyed' ? images.house_destroyed : images.house_construction);
+            else if (this.type === 'goblin_house') img = this.state === 'destroyed' ? images.goblin_house_destroyed : images.goblin_house;
+            else if (this.type === 'goblin_tower') img = this.state === 'destroyed' ? images.goblin_tower_destroyed : images.goblin_tower;
+        }
         
         if (img && img.width > 0) {
             ctx.save();
             ctx.translate(this.x, this.y);
-            if (this.hp < this.maxHp && this.state !== 'destroyed') {
+            
+            // Barra de HP para predios ativos ou destruidos
+            if (this.state !== 'blueprint' && this.hp < this.maxHp && this.state !== 'destroyed') {
                 ctx.fillStyle = 'black'; ctx.fillRect(-40, -img.height + 20, 80, 10);
                 ctx.fillStyle = 'red'; ctx.fillRect(-39, -img.height + 21, 78 * (this.hp/this.maxHp), 8);
             }
+            
+            // Barra de Progresso de Construcao
+            if (this.state === 'blueprint' || this.state === 'construction') {
+                ctx.fillStyle = 'black'; ctx.fillRect(-40, -img.height + 10, 80, 8);
+                ctx.fillStyle = '#0f0'; ctx.fillRect(-39, -img.height + 11, 78 * (this.buildProgress/100), 6);
+            }
+
             // Centraliza o predio, alinha pelo topo/y
             ctx.drawImage(img, 0, 0, img.width, img.height, -img.width/2, -img.height + 64, img.width, img.height);
             ctx.restore();
@@ -840,6 +929,8 @@ window.startGame = function(heroClass) {
     document.getElementById('ui').style.display = 'block';
     player = new Player(0, 0, heroClass);
     pet = new Pet(0, 50);
+    pawns.push(new Pawn(-80, 50));
+    pawns.push(new Pawn(80, 50));
     gameStarted = true;
     requestAnimationFrame(gameLoop);
 };
@@ -913,6 +1004,7 @@ function gameLoop(timestamp) {
     renderList.push(...enemies.filter(e => !e.dead));
     renderList.push(...sheeps.filter(s => !s.dead));
     renderList.push(...buildings);
+    renderList.push(...pawns);
 
     visibleDecos.forEach(d => {
         if(d.type === 'tree') {
@@ -958,6 +1050,7 @@ function gameLoop(timestamp) {
     if(!player.dead) player.update();
     if(pet) pet.update();
     buildings.forEach(b => b.update());
+    pawns.forEach(p => p.update());
     enemies.forEach(e => e.update());
     sheeps.forEach(s => s.update());
 
