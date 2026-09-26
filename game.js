@@ -1,8 +1,15 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
-const hpEl = document.getElementById('ui-hp');
+const hpEl = document.getElementById('ui-hp-fill');
 const goldEl = document.getElementById('ui-gold');
 const woodEl = document.getElementById('ui-wood');
+const scoreEl = document.getElementById('ui-score');
+
+function formatNumber(num) {
+    if (num >= 1000000) return (num / 1000000).toFixed(1).replace(/\.0$/, '') + 'kk';
+    if (num >= 1000) return (num / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
+    return num.toString();
+}
 
 // Tela cheia
 function resize() {
@@ -952,8 +959,10 @@ window.startGame = function(heroClass) {
         return;
     }
     document.getElementById('character-select').style.display = 'none';
-    document.getElementById('hud-top-right').style.display = 'block';
+    document.getElementById('hud-top-left').style.display = 'flex';
+    document.getElementById('hud-top-right').style.display = 'flex';
     document.getElementById('build-btn-container').style.display = 'block';
+    document.getElementById('mobile-controls').style.display = 'block';
     player = new Player(0, 0, heroClass);
     pet = new Pet(0, 50);
     pawns.push(new Pawn(-80, 50));
@@ -1179,9 +1188,24 @@ function gameLoop(timestamp) {
     ctx.restore();
 
     // Atualizar HUD
-    if (hpEl) hpEl.innerText = Math.max(0, Math.floor((player.hp / player.maxHp) * 100)) + '%';
-    if (goldEl) goldEl.innerText = playerGold;
-    if (woodEl) woodEl.innerText = playerWood;
+    if (hpEl) {
+        let pct = Math.max(0, Math.floor((player.hp / player.maxHp) * 100));
+        hpEl.style.width = pct + '%';
+    }
+    
+    function updateRes(el, val) {
+        if (!el) return;
+        let strVal = formatNumber(val);
+        if (el.innerText !== strVal) {
+            el.innerText = strVal;
+            el.classList.remove('pop-anim');
+            void el.offsetWidth; // trigger reflow
+            el.classList.add('pop-anim');
+        }
+    }
+    updateRes(goldEl, playerGold);
+    updateRes(woodEl, playerWood);
+    updateRes(scoreEl, score);
 
     requestAnimationFrame(gameLoop);
 }
