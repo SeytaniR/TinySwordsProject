@@ -20,7 +20,7 @@ const TILE_SIZE = 64;
 
 // Imagens
 const images = {
-    player: new Image(), mage: new Image(), enemy: new Image(), tnt_goblin: new Image(), barrel_goblin: new Image(),
+    player: new Image(), mage: new Image(), enemy: new Image(), tnt_goblin: new Image(), barrel_goblin: new Image(), wolf: new Image(),
     ground: new Image(), water: new Image(), foam: new Image(), tree: new Image(),
     meat: new Image(), gold: new Image(), wood: new Image(), gold_mine: new Image(), sheep: new Image(),
     dynamite: new Image(), explosion: new Image(), fire: new Image(),
@@ -41,6 +41,7 @@ Object.keys(images).forEach(key => {
 
 images.player.src = 'game_assets/player.png';
 images.mage.src = 'game_assets/mage.png';
+images.wolf.src = 'game_assets/wolf.png';
 images.enemy.src = 'game_assets/enemy.png';
 images.tnt_goblin.src = 'game_assets/tnt_goblin.png';
 images.barrel_goblin.src = 'game_assets/barrel_goblin.png';
@@ -228,6 +229,7 @@ let projectiles = [];
 let explosions = [];
 let sheeps = [];
 let player = null;
+let pet = null;
 
 function createExplosion(x, y, damage, radius) {
     explosions.push({ x, y, frame: 0, timer: 0 });
@@ -294,7 +296,7 @@ class Entity {
         const anim = this.animationData;
         
         let fSize = FRAME_SIZE;
-        if (this.imageType === 'sheep' || this.imageType === 'barrel_goblin' || this.imageType === 'mage') fSize = 128;
+        if (this.imageType === 'sheep' || this.imageType === 'barrel_goblin' || this.imageType === 'mage' || this.imageType === 'wolf') fSize = 128;
 
         ctx.save();
         ctx.translate(this.x, this.y);
@@ -482,6 +484,73 @@ class Sheep extends Entity {
     }
 }
 
+class Pet extends Entity {
+    constructor(x, y) {
+        super(x, y, 4, 'wolf'); 
+        this.maxHp = 9999;
+        this.hp = 9999; // Invencível
+    }
+    update() {
+        this.updatePhysics();
+        let nearestEnemy = null;
+        let nearestDist = 300;
+        
+        enemies.forEach(e => {
+            if (!e.dead) {
+                let d = Math.hypot(this.x - e.x, this.y - e.y);
+                if (d < nearestDist) { nearestDist = d; nearestEnemy = e; }
+            }
+        });
+        
+        let targetX = player.x;
+        let targetY = player.y;
+        let stopDist = 70;
+        let isAttackingTarget = false;
+        
+        if (nearestEnemy) {
+            targetX = nearestEnemy.x;
+            targetY = nearestEnemy.y;
+            stopDist = 40;
+            isAttackingTarget = true;
+        } else {
+            let distToPlayer = Math.hypot(this.x - player.x, this.y - player.y);
+            if (distToPlayer > 800) { this.x = player.x; this.y = player.y; }
+        }
+        
+        let dx = targetX - this.x;
+        let dy = targetY - this.y;
+        let dist = Math.hypot(dx, dy);
+        
+        if (dist > stopDist) {
+            if (dx < 0) this.flip = true;
+            if (dx > 0) this.flip = false;
+            moveEntity(this, (dx/dist)*this.speed, (dy/dist)*this.speed, deltaFactor);
+            if (!this.attacking) this.state = 'run';
+        } else {
+            if (isAttackingTarget && !this.attacking && nearestEnemy) {
+                this.attack(nearestEnemy);
+            } else {
+                if (!this.attacking) this.state = 'idle';
+            }
+        }
+        this.updateAnimation();
+    }
+    attack(target) {
+        this.attacking = true;
+        this.state = 'attack';
+        this.frame = 0;
+        if (target.x < this.x) this.flip = true;
+        else this.flip = false;
+        
+        setTimeout(() => {
+            if (target && !target.dead && Math.hypot(this.x - target.x, this.y - target.y) < 80) {
+                let dirX = target.x - this.x;
+                target.takeDamage(10, (dirX/Math.abs(dirX||1)) * 8, 0); // Mordida empurra inimigo
+            }
+        }, 300);
+    }
+}
+
 class Enemy extends Entity {
     constructor(x, y, type) {
         let img = 'enemy';
@@ -602,6 +671,7 @@ window.startGame = function(heroClass) {
     document.getElementById('character-select').style.display = 'none';
     document.getElementById('ui').style.display = 'block';
     player = new Player(0, 0, heroClass);
+    pet = new Pet(0, 50);
     gameStarted = true;
     requestAnimationFrame(gameLoop);
 };
@@ -671,6 +741,7 @@ function gameLoop(timestamp) {
 
     const renderList = [];
     if (!player.dead) renderList.push(player);
+    if (pet) renderList.push(pet);
     renderList.push(...enemies.filter(e => !e.dead));
     renderList.push(...sheeps.filter(s => !s.dead));
 
@@ -716,6 +787,7 @@ function gameLoop(timestamp) {
     renderList.sort((a, b) => a.y - b.y);
 
     if(!player.dead) player.update();
+    if(pet) pet.update();
     enemies.forEach(e => e.update());
     sheeps.forEach(s => s.update());
 
