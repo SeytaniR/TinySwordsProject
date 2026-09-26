@@ -1,6 +1,8 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 const scoreEl = document.getElementById('score');
+const goldEl = document.getElementById('ui-gold');
+const woodEl = document.getElementById('ui-wood');
 
 // Tela cheia
 function resize() {
@@ -20,8 +22,11 @@ const TILE_SIZE = 64;
 const images = {
     player: new Image(), mage: new Image(), enemy: new Image(), tnt_goblin: new Image(), barrel_goblin: new Image(),
     ground: new Image(), water: new Image(), foam: new Image(), tree: new Image(),
-    meat: new Image(), gold: new Image(), gold_mine: new Image(), sheep: new Image(),
-    dynamite: new Image(), explosion: new Image(),
+    meat: new Image(), gold: new Image(), wood: new Image(), gold_mine: new Image(), sheep: new Image(),
+    dynamite: new Image(), explosion: new Image(), fire: new Image(),
+    goblin_house: new Image(), goblin_house_destroyed: new Image(),
+    tower: new Image(), tower_construction: new Image(), tower_destroyed: new Image(),
+    pawn: new Image(), ui_banner: new Image(), ui_button: new Image(), bridge: new Image(),
     elevation: new Image(), deco1: new Image(), deco2: new Image(), deco3: new Image()
 };
 
@@ -53,6 +58,18 @@ images.elevation.src = 'game_assets/elevation.png';
 images.deco1.src = 'game_assets/deco1.png';
 images.deco2.src = 'game_assets/deco2.png';
 images.deco3.src = 'game_assets/deco3.png';
+
+images.wood.src = 'game_assets/wood.png';
+images.fire.src = 'game_assets/fire.png';
+images.goblin_house.src = 'game_assets/goblin_house.png';
+images.goblin_house_destroyed.src = 'game_assets/goblin_house_destroyed.png';
+images.tower.src = 'game_assets/tower.png';
+images.tower_construction.src = 'game_assets/tower_construction.png';
+images.tower_destroyed.src = 'game_assets/tower_destroyed.png';
+images.pawn.src = 'game_assets/pawn.png';
+images.ui_banner.src = 'game_assets/ui_banner.png';
+images.ui_button.src = 'game_assets/ui_button.png';
+images.bridge.src = 'game_assets/bridge.png';
 
 const keys = { w: false, a: false, s: false, d: false, e: false };
 window.addEventListener('keydown', (e) => {
@@ -131,10 +148,17 @@ function seededRandom(x, y) {
     return n - Math.floor(n);
 }
 
+let treeHP = {};
+let choppedTrees = {};
+let playerWood = 0;
+
 // Lógica de Procedural e Biomas
 function getTileType(c, r) {
     let val = seededRandom(c, r);
-    if (val < 0.05) return 'tree';
+    if (val < 0.05) {
+        if (choppedTrees[`${c},${r}`]) return 'empty'; // árvore derrubada vira chão
+        return 'tree';
+    }
     
     if (val > 0.99) {
         // Regra de espaçamento: Checa raio 4 (muito mais espaço) para evitar minas grudadas
@@ -330,7 +354,8 @@ class Player extends Entity {
             let item = items[i];
             if (Math.hypot(this.x - item.x, this.y - item.y) < 50) {
                 if (item.type === 'meat') this.hp = Math.min(this.maxHp, this.hp + 30);
-                else if (item.type === 'gold') playerGold += 5;
+                else if (item.type === 'gold') { playerGold += 5; goldEl.innerText = playerGold; }
+                else if (item.type === 'wood') { playerWood += 1; woodEl.innerText = playerWood; }
                 items.splice(i, 1);
             }
         }
@@ -389,14 +414,32 @@ class Player extends Entity {
                 for(let dc=-2; dc<=2; dc++){
                     for(let dr=-2; dr<=2; dr++){
                         let c = ec+dc; let r = er+dr;
-                        if(getTileType(c, r) === 'mine') {
-                            let wx = c * TILE_SIZE + TILE_SIZE/2;
-                            let wy = r * TILE_SIZE + TILE_SIZE/2;
+                        let type = getTileType(c, r);
+                        let wx = c * TILE_SIZE + TILE_SIZE/2;
+                        let wy = r * TILE_SIZE + TILE_SIZE/2;
+                        
+                        if(type === 'mine') {
                             if(Math.hypot(this.x - wx, this.y - wy) < 100) {
                                 const dirX = wx - this.x;
                                 if ((!this.flip && dirX >= -20) || (this.flip && dirX <= 20)) {
                                     screenShake = 2;
                                     if(Math.random() < 0.6) dropItem(wx, wy + 30, 'gold');
+                                }
+                            }
+                        } else if(type === 'tree') {
+                            if(Math.hypot(this.x - wx, this.y - (wy + 40)) < 80) {
+                                const dirX = wx - this.x;
+                                if ((!this.flip && dirX >= -20) || (this.flip && dirX <= 20)) {
+                                    screenShake = 1;
+                                    let key = `${c},${r}`;
+                                    if(!treeHP[key]) treeHP[key] = 3;
+                                    treeHP[key]--;
+                                    if(treeHP[key] <= 0) {
+                                        choppedTrees[key] = true;
+                                        for(let w=0; w<3; w++) {
+                                            setTimeout(() => dropItem(wx + (Math.random()*40-20), wy + 20 + (Math.random()*40-20), 'wood'), w*100);
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -619,7 +662,9 @@ function gameLoop(timestamp) {
     }
 
     items.forEach(item => {
-        let img = item.type === 'meat' ? images.meat : images.gold;
+        let img = images.gold;
+        if (item.type === 'meat') img = images.meat;
+        else if (item.type === 'wood') img = images.wood;
         ctx.drawImage(img, 0, 0, 128, 128, item.x - 20, item.y - 20, 40, 40);
         item.timer -= deltaFactor;
     });
@@ -693,6 +738,28 @@ function gameLoop(timestamp) {
                     p.dead = true;
                 }
             });
+            if (!p.dead) {
+                let ec = Math.floor(p.x/TILE_SIZE);
+                let er = Math.floor(p.y/TILE_SIZE);
+                let type = getTileType(ec, er);
+                let wx = ec * TILE_SIZE + TILE_SIZE/2;
+                let wy = er * TILE_SIZE + TILE_SIZE/2;
+                if (type === 'mine' && Math.hypot(p.x - wx, p.y - wy) < 60) {
+                    p.dead = true;
+                    if(Math.random() < 0.3) dropItem(wx, wy + 30, 'gold');
+                } else if (type === 'tree' && Math.hypot(p.x - wx, p.y - (wy + 40)) < 40) {
+                    p.dead = true;
+                    let key = `${ec},${er}`;
+                    if(!treeHP[key]) treeHP[key] = 3;
+                    treeHP[key]--;
+                    if(treeHP[key] <= 0) {
+                        choppedTrees[key] = true;
+                        for(let w=0; w<3; w++) {
+                            setTimeout(() => dropItem(wx + (Math.random()*40-20), wy + 20 + (Math.random()*40-20), 'wood'), w*100);
+                        }
+                    }
+                }
+            }
             if (p.timer <= 0) p.dead = true;
         } else {
             ctx.drawImage(images.dynamite, 0, 0, 64, 64, p.x - 15, p.y - 15, 30, 30);

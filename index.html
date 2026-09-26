@@ -27,12 +27,21 @@
         }
         #ui {
             position: fixed;
-            top: 10px;
-            left: 10px;
+            top: 10px; left: 10px;
+            background: url('game_assets/ui_banner.png') no-repeat center center;
+            background-size: 100% 100%;
+            padding: 30px 40px;
+            color: #333;
+            text-shadow: none;
+            font-family: 'Courier New', Courier, monospace;
+            font-weight: bold;
             pointer-events: none;
-            text-shadow: 1px 1px 2px black;
+            width: 350px;
+            text-align: center;
             z-index: 1000;
         }
+        #ui h2 { margin-top: 0; font-size: 20px; color: #500; }
+        #ui p { font-size: 14px; margin: 5px 0; }
 
         /* Controles Mobile */
         #mobile-controls {
@@ -123,9 +132,9 @@
         </div>
 
         <div id="ui" style="display: none;">
-            <h2>Tiny Swords - Arena Aberta</h2>
+            <h2>Tiny Swords - Aventura</h2>
             <p>Controles: WASD para andar | E curar | Clique para atacar</p>
-            <p>Goblins derrotados: <span id="score">0</span></p>
+            <p><strong>Goblins:</strong> <span id="score">0</span> | <strong>Ouro:</strong> <span id="ui-gold">0</span> | <strong>Madeira:</strong> <span id="ui-wood">0</span></p>
         </div>
         <div id="mobile-controls">
             <div class="joy-container" id="joystick-zone">
