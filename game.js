@@ -1,6 +1,6 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
-const scoreEl = document.getElementById('score');
+const hpEl = document.getElementById('ui-hp');
 const goldEl = document.getElementById('ui-gold');
 const woodEl = document.getElementById('ui-wood');
 
@@ -387,11 +387,39 @@ class Player extends Entity {
             let item = items[i];
             if (Math.hypot(this.x - item.x, this.y - item.y) < 50) {
                 if (item.type === 'meat') this.hp = Math.min(this.maxHp, this.hp + 30);
-                else if (item.type === 'gold') { playerGold += 5; goldEl.innerText = playerGold; }
-                else if (item.type === 'wood') { playerWood += 1; woodEl.innerText = playerWood; }
+                else if (item.type === 'gold') { playerGold += 5; }
+                else if (item.type === 'wood') { playerWood += 1; }
                 items.splice(i, 1);
             }
         }
+        
+        // Auto-Ataque
+        if (!this.attacking) {
+            let autoAttack = false;
+            let range = this.heroClass === 'mage' ? 250 : 120;
+            // Procurar inimigo próximo
+            for (let i = 0; i < enemies.length; i++) {
+                let e = enemies[i];
+                if (!e.dead && Math.hypot(this.x - e.x, this.y - e.y) < range) {
+                    autoAttack = true;
+                    this.flip = e.x < this.x;
+                    break;
+                }
+            }
+            if (!autoAttack) {
+                // Procurar predio inimigo proximo
+                for (let i = 0; i < buildings.length; i++) {
+                    let b = buildings[i];
+                    if (b.faction === 'enemy' && b.state !== 'destroyed' && Math.hypot(this.x - b.x, this.y - b.y) < range) {
+                        autoAttack = true;
+                        this.flip = b.x < this.x;
+                        break;
+                    }
+                }
+            }
+            if (autoAttack) this.attack();
+        }
+
         this.updateAnimation();
     }
     attack() {
@@ -626,8 +654,6 @@ class Pawn extends Entity {
                         
                         if (builtSomething) {
                             this.targetBuilding.buildProgress += 5; 
-                            woodEl.innerText = playerWood;
-                            goldEl.innerText = playerGold;
                         } else {
                             this.state = 'idle'; // Pobreza
                         }
@@ -867,7 +893,7 @@ class Enemy extends Entity {
     die() {
         super.die();
         if (this.enemyType === 'kamikaze') createExplosion(this.x, this.y, 40, 100);
-        score++; scoreEl.innerText = score;
+        score++;
         if (Math.random() < 0.2) dropItem(this.x, this.y, 'meat');
         if (Math.random() < 0.3) dropItem(this.x, this.y, 'gold');
     }
@@ -926,7 +952,8 @@ window.startGame = function(heroClass) {
         return;
     }
     document.getElementById('character-select').style.display = 'none';
-    document.getElementById('ui').style.display = 'block';
+    document.getElementById('hud-top-right').style.display = 'block';
+    document.getElementById('build-btn-container').style.display = 'block';
     player = new Player(0, 0, heroClass);
     pet = new Pet(0, 50);
     pawns.push(new Pawn(-80, 50));
@@ -1151,6 +1178,16 @@ function gameLoop(timestamp) {
 
     ctx.restore();
 
-    // Fix bug text-rendering on bottom panel. Nao afeta o HTML fixed bottom
+    // Atualizar HUD
+    if (hpEl) hpEl.innerText = Math.max(0, Math.floor((player.hp / player.maxHp) * 100)) + '%';
+    if (goldEl) goldEl.innerText = playerGold;
+    if (woodEl) woodEl.innerText = playerWood;
+
     requestAnimationFrame(gameLoop);
 }
+
+window.placeBlueprint = function(type) {
+    if (!gameStarted || player.dead) return;
+    buildings.push(new Building(player.x, player.y, type, 'player'));
+    document.getElementById('build-menu').style.display = 'none';
+};

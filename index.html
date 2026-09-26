@@ -130,13 +130,38 @@
                 <button class="char-btn" onclick="startGame('mage')">🔮 Mago<br><span style="font-size:16px">(Ataque Mágico a Distância)</span></button>
             </div>
         </div>
-
-        <div id="ui" style="display: none;">
-            <h2>Tiny Swords - Aventura</h2>
-            <p>Controles: WASD para andar | E curar | Clique para atacar</p>
-            <p><strong>Goblins:</strong> <span id="score">0</span> | <strong>Ouro:</strong> <span id="ui-gold">0</span> | <strong>Madeira:</strong> <span id="ui-wood">0</span></p>
-            <p style="color: #005000; font-size: 13px;">[1] Torre (20W, 10G) | [2] Castelo (50W, 50G)</p>
+        <!-- Nova HUD no topo direito -->
+        <div id="hud-top-right" style="display: none; position: fixed; top: 15px; right: 20px; background: rgba(0,0,0,0.6); padding: 10px 20px; border-radius: 10px; border: 2px solid #555; pointer-events: none; z-index: 1000; font-size: 20px; font-weight: bold; text-shadow: 1px 1px 2px black;">
+            <div style="display:flex; align-items:center; margin-bottom: 5px;">
+                <span style="color:#ff4444; width: 30px;">HP</span> 
+                <span id="ui-hp">100%</span>
+            </div>
+            <div style="display:flex; align-items:center; margin-bottom: 5px;">
+                <span style="color:#ffd700; width: 30px;">Ouro</span> 
+                <span id="ui-gold">0</span>
+            </div>
+            <div style="display:flex; align-items:center;">
+                <span style="color:#8b4513; width: 30px;">Mad</span> 
+                <span id="ui-wood">0</span>
+            </div>
         </div>
+
+        <!-- Menu Inventario -->
+        <div id="build-btn-container" style="display: none; position: fixed; bottom: 30px; right: 30px; z-index: 1000;">
+            <div id="build-menu" style="display: none; background: rgba(0,0,0,0.85); padding: 15px; border-radius: 10px; border: 2px solid #888; margin-bottom: 15px;">
+                <h3 style="margin-top:0; color: #fff; text-align: center; font-size: 16px;">Inventario / Construir</h3>
+                <button onclick="window.placeBlueprint('tower')" style="width: 100%; margin-bottom: 10px; padding: 10px; background: #333; color: white; border: 1px solid #555; border-radius: 5px; cursor: pointer; text-align: left; font-size: 16px;">
+                    Torre <span style="color:#aaa; font-size:14px; float:right;">20 Mad / 10 Ouro</span>
+                </button>
+                <button onclick="window.placeBlueprint('castle')" style="width: 100%; padding: 10px; background: #333; color: white; border: 1px solid #555; border-radius: 5px; cursor: pointer; text-align: left; font-size: 16px;">
+                    Castelo <span style="color:#aaa; font-size:14px; float:right;">50 Mad / 50 Ouro</span>
+                </button>
+            </div>
+            <button id="toggle-build-btn" onclick="document.getElementById('build-menu').style.display = document.getElementById('build-menu').style.display === 'none' ? 'block' : 'none'" style="width: 70px; height: 70px; border-radius: 50%; background: #4caf50; border: 3px solid #2e7d32; color: white; font-size: 16px; display: flex; justify-content: center; align-items: center; cursor: pointer; float: right; box-shadow: 0 4px 10px rgba(0,0,0,0.5);">
+                Construir
+            </button>
+        </div>
+
         <div id="mobile-controls">
             <div class="joy-container" id="joystick-zone">
                 <div class="joy-knob" id="joystick-knob"></div>
