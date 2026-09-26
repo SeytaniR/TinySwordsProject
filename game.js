@@ -136,14 +136,14 @@ function getTileType(c, r) {
     let val = seededRandom(c, r);
     if (val < 0.05) return 'tree';
     
-    if (val > 0.98) {
-        // Regra de espaçamento: Checa raio 2 ao redor para evitar minas grudadas
+    if (val > 0.99) {
+        // Regra de espaçamento: Checa raio 4 (muito mais espaço) para evitar minas grudadas
         let isLocalMax = true;
-        for (let dc = -2; dc <= 2; dc++) {
-            for (let dr = -2; dr <= 2; dr++) {
+        for (let dc = -4; dc <= 4; dc++) {
+            for (let dr = -4; dr <= 4; dr++) {
                 if (dc === 0 && dr === 0) continue;
                 let nVal = seededRandom(c + dc, r + dr);
-                if (nVal > 0.98 && nVal > val) {
+                if (nVal > 0.99 && nVal > val) {
                     isLocalMax = false; break;
                 }
             }
@@ -162,8 +162,8 @@ function getTileType(c, r) {
 function checkCollision(nx, ny) {
     let ec = Math.floor(nx/TILE_SIZE);
     let er = Math.floor(ny/TILE_SIZE);
-    for(let dc=-1; dc<=1; dc++){
-        for(let dr=-1; dr<=1; dr++){
+    for(let dc=-2; dc<=2; dc++){ // Raio maior para não travar na borda de minas grandes!
+        for(let dr=-2; dr<=2; dr++){
             let c = ec + dc; let r = er + dr;
             let type = getTileType(c, r);
             let wx = c * TILE_SIZE + TILE_SIZE/2;
@@ -172,7 +172,8 @@ function checkCollision(nx, ny) {
             if (type === 'tree') {
                 if (Math.hypot(nx - wx, ny - (wy + 40)) < 25) return true;
             } else if (type === 'mine') {
-                if (Math.hypot(nx - wx, ny - wy) < 45) return true;
+                // Colisão retangular exata para a mina!
+                if (Math.abs(nx - wx) < 70 && ny > wy - 10 && ny < wy + 40) return true;
             }
         }
     }
@@ -385,8 +386,8 @@ class Player extends Entity {
                 
                 let ec = Math.floor(this.x/TILE_SIZE);
                 let er = Math.floor(this.y/TILE_SIZE);
-                for(let dc=-1; dc<=1; dc++){
-                    for(let dr=-1; dr<=1; dr++){
+                for(let dc=-2; dc<=2; dc++){
+                    for(let dr=-2; dr<=2; dr++){
                         let c = ec+dc; let r = er+dr;
                         if(getTileType(c, r) === 'mine') {
                             let wx = c * TILE_SIZE + TILE_SIZE/2;
@@ -647,7 +648,7 @@ function gameLoop(timestamp) {
         if(d.type === 'mine') {
             renderList.push({ 
                 isEntity: false, 
-                y: d.y + 60, 
+                y: d.y + 35, 
                 draw: (c) => {
                     c.save();
                     c.globalCompositeOperation = 'lighter';
