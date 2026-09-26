@@ -20,7 +20,7 @@ const TILE_SIZE = 64;
 
 // Imagens
 const images = {
-    player: new Image(), mage: new Image(), enemy: new Image(), tnt_goblin: new Image(), barrel_goblin: new Image(), wolf: new Image(), orc: new Image(),
+    player: new Image(), mage: new Image(), enemy: new Image(), tnt_goblin: new Image(), barrel_goblin: new Image(), wolf: new Image(), orc: new Image(), bat: new Image(),
     ground: new Image(), water: new Image(), foam: new Image(), tree: new Image(),
     meat: new Image(), gold: new Image(), wood: new Image(), gold_mine: new Image(), sheep: new Image(),
     dynamite: new Image(), explosion: new Image(), fire: new Image(),
@@ -45,6 +45,7 @@ images.player.src = 'game_assets/player.png';
 images.mage.src = 'game_assets/mage.png';
 images.wolf.src = 'game_assets/wolf.png';
 images.orc.src = 'game_assets/orc.png';
+images.bat.src = 'game_assets/bat.png';
 images.enemy.src = 'game_assets/enemy.png';
 images.tnt_goblin.src = 'game_assets/tnt_goblin.png';
 images.barrel_goblin.src = 'game_assets/barrel_goblin.png';
@@ -327,7 +328,7 @@ class Entity {
         const anim = this.animationData;
         
         let fSize = FRAME_SIZE;
-        if (this.imageType === 'sheep' || this.imageType === 'barrel_goblin' || this.imageType === 'mage' || this.imageType === 'wolf' || this.imageType === 'orc') fSize = 128;
+        if (this.imageType === 'sheep' || this.imageType === 'barrel_goblin' || this.imageType === 'mage' || this.imageType === 'wolf' || this.imageType === 'orc' || this.imageType === 'bat') fSize = 128;
 
         ctx.save();
         ctx.translate(this.x, this.y);
@@ -682,10 +683,12 @@ class Enemy extends Entity {
         if(type === 'ranged') img = 'tnt_goblin';
         if(type === 'kamikaze') img = 'barrel_goblin';
         if(type === 'orc') img = 'orc';
+        if(type === 'bat') img = 'bat';
         
         let speed = 1;
         if(type === 'kamikaze') speed = 1.5;
         if(type === 'orc') speed = 0.8;
+        if(type === 'bat') speed = 2.2;
         
         super(x, y, speed, img);
         this.enemyType = type;
@@ -693,6 +696,9 @@ class Enemy extends Entity {
         if (type === 'orc') {
             this.maxHp = 150;
             this.hp = 150;
+        } else if (type === 'bat') {
+            this.maxHp = 30;
+            this.hp = 30;
         }
         
         this.attackCooldown = 0;
@@ -707,12 +713,19 @@ class Enemy extends Entity {
             const dx = player.x - this.x;
             const dy = player.y - this.y;
 
-            if (this.enemyType === 'melee' || this.enemyType === 'orc') {
+            if (this.enemyType === 'melee' || this.enemyType === 'orc' || this.enemyType === 'bat') {
                 let range = this.enemyType === 'orc' ? 70 : 50;
                 if (dist < range && this.attackCooldown <= 0) this.attack();
                 else if (dist < 800) {
                     this.state = 'run'; this.flip = dx < 0;
-                    moveEntity(this, (dx/dist)*this.speed, (dy/dist)*this.speed, deltaFactor);
+                    
+                    if (this.enemyType === 'bat') {
+                        // Morcegos voam por cima de arvores, nao usam moveEntity() que checa colisao
+                        this.x += (dx/dist)*this.speed * deltaFactor;
+                        this.y += (dy/dist)*this.speed * deltaFactor;
+                    } else {
+                        moveEntity(this, (dx/dist)*this.speed, (dy/dist)*this.speed, deltaFactor);
+                    }
                 } else this.state = 'idle';
             } 
             else if (this.enemyType === 'ranged') {
@@ -738,16 +751,17 @@ class Enemy extends Entity {
     }
     attack() {
         this.attacking = true; this.state = 'attack'; this.frame = 0;
-        if (this.enemyType === 'melee' || this.enemyType === 'orc') {
-            let dmg = this.enemyType === 'orc' ? 30 : 15;
-            let hitRange = this.enemyType === 'orc' ? 90 : 70;
+        if (this.enemyType === 'melee' || this.enemyType === 'orc' || this.enemyType === 'bat') {
+            let dmg = this.enemyType === 'orc' ? 30 : (this.enemyType === 'bat' ? 5 : 15);
+            let hitRange = this.enemyType === 'orc' ? 90 : (this.enemyType === 'bat' ? 60 : 70);
+            let delay = this.enemyType === 'bat' ? 300 : 400; // O morcego ataca mais rápido (frame 4)
             setTimeout(() => {
                 if(this.dead || player.dead) return;
                 if (Math.hypot(this.x - player.x, this.y - player.y) < hitRange) {
                     player.takeDamage(dmg, (player.x - this.x)/50 * 10, (player.y - this.y)/50 * 10);
-                    screenShake = this.enemyType === 'orc' ? 12 : 8;
+                    screenShake = this.enemyType === 'orc' ? 12 : (this.enemyType === 'bat' ? 4 : 8);
                 }
-            }, 400);
+            }, delay);
         } else if (this.enemyType === 'ranged') {
             setTimeout(() => {
                 if(this.dead || player.dead) return;
@@ -783,8 +797,9 @@ function spawnEntity() {
         
         let r = Math.random();
         let type = 'melee';
-        if(r > 0.5) type = 'ranged';
-        if(r > 0.75) type = 'kamikaze';
+        if(r > 0.4) type = 'bat';
+        if(r > 0.6) type = 'ranged';
+        if(r > 0.80) type = 'kamikaze';
         if(r > 0.90) type = 'orc'; // 10% de chance de nascer um Orc brutamontes!
         enemies.push(new Enemy(ex, ey, type));
     }
